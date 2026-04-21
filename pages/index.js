@@ -1,372 +1,420 @@
+import { useState, useEffect } from "react";
 import Head from "next/head";
-import { useState } from "react";
+import { createClient } from "@supabase/supabase-js";
 
-const FEATURES = [
-  { icon: "🏪", title: "متجرك في دقيقة", desc: "افتح متجرك أونلاين بدون تقنية — غير اسمك وصورتك وابدا تبيع" },
-  { icon: "📦", title: "أضف منتجاتك بسهولة", desc: "صور، أسعار، ألوان، مقاسات — كلشي في واجهة بسيطة بالدارجة" },
-  { icon: "📱", title: "طلبات واتساب تلقائية", desc: "كل طلب كيوصلك مباشرة على واتساب ديالك — بدون تطبيق إضافي" },
-  { icon: "💰", title: "دفع أونلاين مغربي", desc: "CIH، CMI، باريدي موبايل — زبونك كيدفع بالطريقة اللي يحبها" },
-  { icon: "🤖", title: "AI يكتب ليك", desc: "وصف المنتج، السعر المناسب، البوست ديال إنستغرام — كلشي بكليك واحد" },
-  { icon: "📊", title: "Dashboard مبيعاتك", desc: "شوف شحال بعت، شحال ربحت، وأي منتج كيمشي أكثر" },
-];
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
 
-const STEPS = [
-  { num: "01", title: "سجل مجاناً", desc: "غير إيميلك وكلمة السر" },
-  { num: "02", title: "سمي متجرك", desc: "اختار اسم وصورة ولون" },
-  { num: "03", title: "أضف منتجاتك", desc: "صور وأسعار في دقائق" },
-  { num: "04", title: "شارك الرابط", desc: "وابدا تستقبل طلبات" },
-];
+const TABS = ["المتجر", "المنتجات", "الطلبات"];
 
-const PLANS = [
-  { name: "مجاني", price: "0", period: "للأبد", features: ["5 منتجات", "رابط متجر", "طلبات واتساب"], cta: "ابدا مجاناً", featured: false },
-  { name: "Pro", price: "199", period: "درهم/شهر", features: ["منتجات غير محدودة", "دفع أونلاين", "AI كاتب المحتوى", "Dashboard مبيعات", "دعم أولوي"], cta: "ابدا 14 يوم مجاناً", featured: true },
-  { name: "Business", price: "499", period: "درهم/شهر", features: ["كلشي في Pro", "متاجر متعددة", "تقارير متقدمة", "API خاص", "مدير حساب"], cta: "تواصل معنا", featured: false },
-];
+export default function Dashboard() {
+  const [tab, setTab] = useState("المتجر");
+  const [store, setStore] = useState(null);
+  const [products, setProducts] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState("");
 
-export default function Home() {
-  const [email, setEmail] = useState("");
-  const [submitted, setSubmitted] = useState(false);
+  const [storeName, setStoreName] = useState("");
+  const [storeDesc, setStoreDesc] = useState("");
+  const [storePhone, setStorePhone] = useState("");
+  const [storeColor, setStoreColor] = useState("#ff6b2b");
 
-  const handleSubmit = () => {
-    if (email) setSubmitted(true);
+  const [prodName, setProdName] = useState("");
+  const [prodPrice, setProdPrice] = useState("");
+  const [prodDesc, setProdDesc] = useState("");
+  const [addingProd, setAddingProd] = useState(false);
+  const [showAddProd, setShowAddProd] = useState(false);
+
+  const USER_ID = "demo_user_1";
+
+  useEffect(() => { loadData(); }, []);
+
+  const loadData = async () => {
+    setLoading(true);
+    const { data: storeData } = await supabase
+      .from("stores").select("*").eq("user_id", USER_ID).single();
+
+    if (storeData) {
+      setStore(storeData);
+      setStoreName(storeData.name);
+      setStoreDesc(storeData.description || "");
+      setStorePhone(storeData.phone || "");
+      setStoreColor(storeData.color || "#ff6b2b");
+
+      const { data: prods } = await supabase
+        .from("products").select("*").eq("store_id", storeData.id).order("created_at", { ascending: false });
+      setProducts(prods || []);
+
+      const { data: ords } = await supabase
+        .from("orders").select("*").eq("store_id", storeData.id).order("created_at", { ascending: false });
+      setOrders(ords || []);
+    }
+    setLoading(false);
   };
+
+  const saveStore = async () => {
+    setSaving(true);
+    if (store) {
+      await supabase.from("stores").update({
+        name: storeName, description: storeDesc, phone: storePhone, color: storeColor
+      }).eq("id", store.id);
+    } else {
+      const { data } = await supabase.from("stores").insert({
+        user_id: USER_ID, name: storeName, description: storeDesc, phone: storePhone, color: storeColor
+      }).select().single();
+      setStore(data);
+    }
+    setMsg("✅ تم الحفظ!");
+    setTimeout(() => setMsg(""), 2000);
+    setSaving(false);
+    loadData();
+  };
+
+  const addProduct = async () => {
+    if (!prodName || !prodPrice || !store) return;
+    setAddingProd(true);
+    await supabase.from("products").insert({
+      store_id: store.id, name: prodName, price: parseFloat(prodPrice), description: prodDesc
+    });
+    setProdName(""); setProdPrice(""); setProdDesc("");
+    setShowAddProd(false);
+    setMsg("✅ تم إضافة المنتج!");
+    setTimeout(() => setMsg(""), 2000);
+    setAddingProd(false);
+    loadData();
+  };
+
+  const toggleProduct = async (id, available) => {
+    await supabase.from("products").update({ available: !available }).eq("id", id);
+    loadData();
+  };
+
+  const deleteProduct = async (id) => {
+    await supabase.from("products").delete().eq("id", id);
+    loadData();
+  };
+
+  const storeUrl = store ? `hanouti-two.vercel.app/store/${store.id}` : "";
+  const totalRevenue = orders.filter(o => o.status === "completed").reduce((s, o) => s + (o.total || 0), 0);
 
   return (
     <>
       <Head>
-        <title>Hanouti — افتح متجرك أونلاين في دقيقة</title>
+        <title>Hanouti — Dashboard</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta name="description" content="منصة التجارة الإلكترونية الأولى بالدارجة المغربية" />
-        <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800;900&family=Clash+Display:wght@400;500;600;700&display=swap" rel="stylesheet" />
+        <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet" />
       </Head>
 
       <div className="root">
-        {/* BG Effects */}
-        <div className="bg-pattern" />
-        <div className="glow-1" />
-        <div className="glow-2" />
-        <div className="glow-3" />
+        <div className="bg-glow" />
 
-        {/* NAV */}
-        <nav className="nav">
-          <div className="nav-inner">
-            <div className="logo">
-              <span className="logo-icon">🏪</span>
-              <span className="logo-text">Hanouti</span>
-            </div>
-            <div className="nav-links">
-              <a href="#features">المميزات</a>
-              <a href="#how">كيفاش</a>
-              <a href="#pricing">الأسعار</a>
-            </div>
-            <a href="#signup" className="nav-cta">ابدا مجاناً ←</a>
-          </div>
-        </nav>
-
-        {/* HERO */}
-        <section className="hero">
-          <div className="hero-badge">🇲🇦 منصة مغربية 100%</div>
-          <h1 className="hero-title">
-            افتح <span className="highlight">حانوتك</span>
-            <br />أونلاين في دقيقة
-          </h1>
-          <p className="hero-sub">
-            بدون تقنية، بدون تعقيد، بدون رأس مال كبير
-            <br />كل شيء بالدارجة — من فتح المتجر لاستقبال الفلوس
-          </p>
-
-          <div className="hero-stats">
-            <div className="stat">
-              <span className="stat-num">+2,400</span>
-              <span className="stat-label">تاجر مغربي</span>
-            </div>
-            <div className="stat-divider" />
-            <div className="stat">
-              <span className="stat-num">+180K</span>
-              <span className="stat-label">طلب تم</span>
-            </div>
-            <div className="stat-divider" />
-            <div className="stat">
-              <span className="stat-num">4.9 ⭐</span>
-              <span className="stat-label">تقييم التجار</span>
-            </div>
-          </div>
-
-          <div className="hero-cta" id="signup">
-            {!submitted ? (
-              <div className="email-form">
-                <input
-                  type="email"
-                  placeholder="إيميلك هنا..."
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && handleSubmit()}
-                  dir="ltr"
-                  className="email-input"
-                />
-                <button className="cta-btn" onClick={handleSubmit}>
-                  ابدا مجاناً ←
-                </button>
-              </div>
-            ) : (
-              <div className="success-msg">
-                ✅ مزيان! غادي نتواصلو معك قريباً
-              </div>
-            )}
-            <p className="cta-note">مجاني — بدون بطاقة بنكية</p>
-          </div>
-
-          {/* Mock Store Preview */}
-          <div className="store-preview">
-            <div className="store-card">
-              <div className="store-header">
-                <div className="store-avatar">👗</div>
-                <div>
-                  <p className="store-name">متجر سلمى للملابس</p>
-                  <p className="store-url">hanouti.ma/salma</p>
-                </div>
-                <div className="store-badge">🟢 مفتوح</div>
-              </div>
-              <div className="store-products">
-                {["👗 فستان صيفي — 299 درهم", "👠 حذاء كعب — 450 درهم", "👜 شنطة جلد — 380 درهم"].map((p, i) => (
-                  <div key={i} className="store-product">
-                    <span>{p}</span>
-                    <button className="add-btn">أضف 🛒</button>
-                  </div>
-                ))}
-              </div>
-              <button className="whatsapp-btn">📱 اطلب عبر واتساب</button>
-            </div>
-          </div>
-        </section>
-
-        {/* FEATURES */}
-        <section className="section" id="features">
-          <div className="section-tag">المميزات</div>
-          <h2 className="section-title">كلشي اللي محتاجو<br /><span className="highlight">تاجر ناجح</span></h2>
-          <div className="features-grid">
-            {FEATURES.map((f, i) => (
-              <div key={i} className="feature-card">
-                <span className="feature-icon">{f.icon}</span>
-                <h3 className="feature-title">{f.title}</h3>
-                <p className="feature-desc">{f.desc}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* HOW IT WORKS */}
-        <section className="section" id="how">
-          <div className="section-tag">كيفاش</div>
-          <h2 className="section-title">4 خطوات و<span className="highlight">متجرك جاهز</span></h2>
-          <div className="steps">
-            {STEPS.map((s, i) => (
-              <div key={i} className="step">
-                <div className="step-num">{s.num}</div>
-                <div className="step-line" />
-                <h3 className="step-title">{s.title}</h3>
-                <p className="step-desc">{s.desc}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* PRICING */}
-        <section className="section" id="pricing">
-          <div className="section-tag">الأسعار</div>
-          <h2 className="section-title">ابدا <span className="highlight">مجاناً</span> — كبر بعدين</h2>
-          <div className="plans-grid">
-            {PLANS.map((p, i) => (
-              <div key={i} className={`plan-card ${p.featured ? "plan-featured" : ""}`}>
-                {p.featured && <div className="plan-popular">الأكثر استخداماً ⚡</div>}
-                <h3 className="plan-name">{p.name}</h3>
-                <div className="plan-price">
-                  <span className="plan-amount">{p.price}</span>
-                  <span className="plan-period">{p.period}</span>
-                </div>
-                <ul className="plan-features">
-                  {p.features.map((f, j) => (
-                    <li key={j}>✓ {f}</li>
-                  ))}
-                </ul>
-                <button className={`plan-cta ${p.featured ? "plan-cta-featured" : ""}`}>
-                  {p.cta}
-                </button>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* CTA FINAL */}
-        <section className="final-cta">
-          <h2 className="final-title">جاهز تبدا تبيع؟</h2>
-          <p className="final-sub">+2400 تاجر مغربي بداو معنا — أنت التالي</p>
-          <a href="#signup" className="final-btn">افتح حانوتك دابا — مجاناً ←</a>
-        </section>
-
-        {/* FOOTER */}
-        <footer className="footer">
-          <div className="footer-logo">
+        {/* Sidebar */}
+        <aside className="sidebar">
+          <div className="logo">
             <span>🏪</span>
-            <span>Hanouti</span>
+            <span className="logo-text">Hanouti</span>
           </div>
-          <p className="footer-text">صنع بـ ❤️ فالمغرب — للمغاربة</p>
-          <p className="footer-copy">© 2026 Hanouti. جميع الحقوق محفوظة.</p>
-        </footer>
+
+          <nav className="sidenav">
+            {TABS.map(t => (
+              <button key={t} className={`nav-item ${tab === t ? "active" : ""}`} onClick={() => setTab(t)}>
+                <span className="nav-icon">
+                  {t === "المتجر" ? "🏪" : t === "المنتجات" ? "📦" : "🛍️"}
+                </span>
+                <span>{t}</span>
+              </button>
+            ))}
+          </nav>
+
+          {store && (
+            <div className="store-link">
+              <p className="store-link-label">رابط متجرك</p>
+              <p className="store-link-url">{storeUrl}</p>
+              <button className="copy-btn" onClick={() => navigator.clipboard.writeText(`https://${storeUrl}`)}>
+                نسخ الرابط 📋
+              </button>
+            </div>
+          )}
+        </aside>
+
+        {/* Main */}
+        <main className="main">
+          {/* Header */}
+          <div className="header">
+            <div>
+              <h1 className="header-title">
+                {tab === "المتجر" ? "إعدادات المتجر" : tab === "المنتجات" ? "المنتجات" : "الطلبات"}
+              </h1>
+              <p className="header-sub">
+                {tab === "المتجر" ? "خصص متجرك كيفما تبغي" : tab === "المنتجات" ? `${products.length} منتج` : `${orders.length} طلب`}
+              </p>
+            </div>
+            {msg && <div className="msg-badge">{msg}</div>}
+          </div>
+
+          {loading ? (
+            <div className="loading">
+              <div className="spinner" />
+              <p>جاري التحميل...</p>
+            </div>
+          ) : (
+            <>
+              {/* Stats */}
+              <div className="stats">
+                <div className="stat-card">
+                  <p className="stat-label">المنتجات</p>
+                  <p className="stat-val">{products.length}</p>
+                </div>
+                <div className="stat-card">
+                  <p className="stat-label">الطلبات</p>
+                  <p className="stat-val">{orders.length}</p>
+                </div>
+                <div className="stat-card">
+                  <p className="stat-label">المبيعات</p>
+                  <p className="stat-val">{totalRevenue} درهم</p>
+                </div>
+                <div className="stat-card">
+                  <p className="stat-label">المنتجات المتاحة</p>
+                  <p className="stat-val">{products.filter(p => p.available).length}</p>
+                </div>
+              </div>
+
+              {/* TAB: Store */}
+              {tab === "المتجر" && (
+                <div className="card">
+                  <h2 className="card-title">معلومات المتجر</h2>
+                  <div className="form-grid">
+                    <div className="field">
+                      <label>اسم المتجر *</label>
+                      <input value={storeName} onChange={e => setStoreName(e.target.value)} placeholder="مثال: متجر سلمى للملابس" />
+                    </div>
+                    <div className="field">
+                      <label>رقم الواتساب *</label>
+                      <input value={storePhone} onChange={e => setStorePhone(e.target.value)} placeholder="0612345678" dir="ltr" />
+                    </div>
+                    <div className="field full">
+                      <label>وصف المتجر</label>
+                      <textarea value={storeDesc} onChange={e => setStoreDesc(e.target.value)} placeholder="اكتب وصفاً لمتجرك..." rows={3} />
+                    </div>
+                    <div className="field">
+                      <label>لون المتجر</label>
+                      <div className="color-row">
+                        {["#ff6b2b", "#7c3aed", "#00b37e", "#0ea5e9", "#e11d48", "#f59e0b"].map(c => (
+                          <button key={c} className={`color-dot ${storeColor === c ? "active" : ""}`} style={{ background: c }} onClick={() => setStoreColor(c)} />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <button className="save-btn" onClick={saveStore} disabled={saving}>
+                    {saving ? "جاري الحفظ..." : "حفظ المتجر ✓"}
+                  </button>
+                </div>
+              )}
+
+              {/* TAB: Products */}
+              {tab === "المنتجات" && (
+                <div>
+                  <div className="card">
+                    <div className="card-header">
+                      <h2 className="card-title">قائمة المنتجات</h2>
+                      <button className="add-btn" onClick={() => setShowAddProd(!showAddProd)}>
+                        + إضافة منتج
+                      </button>
+                    </div>
+
+                    {showAddProd && (
+                      <div className="add-form">
+                        <div className="form-grid">
+                          <div className="field">
+                            <label>اسم المنتج *</label>
+                            <input value={prodName} onChange={e => setProdName(e.target.value)} placeholder="مثال: فستان صيفي" />
+                          </div>
+                          <div className="field">
+                            <label>السعر (درهم) *</label>
+                            <input value={prodPrice} onChange={e => setProdPrice(e.target.value)} placeholder="299" type="number" dir="ltr" />
+                          </div>
+                          <div className="field full">
+                            <label>الوصف</label>
+                            <input value={prodDesc} onChange={e => setProdDesc(e.target.value)} placeholder="وصف مختصر للمنتج..." />
+                          </div>
+                        </div>
+                        <div className="form-btns">
+                          <button className="save-btn" onClick={addProduct} disabled={addingProd}>
+                            {addingProd ? "جاري الإضافة..." : "إضافة المنتج ✓"}
+                          </button>
+                          <button className="cancel-btn" onClick={() => setShowAddProd(false)}>إلغاء</button>
+                        </div>
+                      </div>
+                    )}
+
+                    {products.length === 0 ? (
+                      <div className="empty">
+                        <p className="empty-icon">📦</p>
+                        <p>ما كاين حتى منتج — أضف أول منتج!</p>
+                      </div>
+                    ) : (
+                      <div className="products-list">
+                        {products.map(p => (
+                          <div key={p.id} className="product-item">
+                            <div className="product-info">
+                              <p className="product-name">{p.name}</p>
+                              <p className="product-price">{p.price} درهم</p>
+                              {p.description && <p className="product-desc">{p.description}</p>}
+                            </div>
+                            <div className="product-actions">
+                              <button
+                                className={`toggle-btn ${p.available ? "available" : "unavailable"}`}
+                                onClick={() => toggleProduct(p.id, p.available)}
+                              >
+                                {p.available ? "متاح ✓" : "غير متاح"}
+                              </button>
+                              <button className="delete-btn" onClick={() => deleteProduct(p.id)}>🗑️</button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* TAB: Orders */}
+              {tab === "الطلبات" && (
+                <div className="card">
+                  <h2 className="card-title">الطلبات</h2>
+                  {orders.length === 0 ? (
+                    <div className="empty">
+                      <p className="empty-icon">🛍️</p>
+                      <p>ما كاين حتى طلب بعد — شارك رابط متجرك!</p>
+                    </div>
+                  ) : (
+                    <div className="orders-list">
+                      {orders.map(o => (
+                        <div key={o.id} className="order-item">
+                          <div>
+                            <p className="order-name">{o.customer_name || "زبون"}</p>
+                            <p className="order-phone">{o.customer_phone}</p>
+                            <p className="order-date">{new Date(o.created_at).toLocaleDateString("ar-MA")}</p>
+                          </div>
+                          <div className="order-right">
+                            <p className="order-total">{o.total} درهم</p>
+                            <span className={`order-status ${o.status}`}>
+                              {o.status === "pending" ? "جديد" : o.status === "completed" ? "مكتمل" : "ملغي"}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </main>
       </div>
 
       <style jsx global>{`
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-
         :root {
-          --bg: #f8f5f0;
-          --surface: #ffffff;
-          --surface2: #f2ede6;
-          --border: rgba(0,0,0,0.08);
-          --orange: #ff6b2b;
-          --orange2: #ff8c42;
-          --dark: #1a1208;
-          --text: #2d2416;
-          --muted: #8a7a6a;
-          --green: #00b37e;
+          --bg: #f8f5f0; --surface: #ffffff; --surface2: #f2ede6;
+          --border: rgba(0,0,0,0.08); --orange: #ff6b2b; --dark: #1a1208;
+          --text: #2d2416; --muted: #8a7a6a; --green: #00b37e; --red: #e11d48;
         }
+        html, body { height: 100%; }
+        body { background: var(--bg); color: var(--text); font-family: "Tajawal", sans-serif; direction: rtl; }
+        .root { display: flex; min-height: 100vh; position: relative; }
+        .bg-glow { position: fixed; top: -200px; right: -200px; width: 600px; height: 600px; background: radial-gradient(circle, rgba(255,107,43,0.08) 0%, transparent 65%); pointer-events: none; z-index: 0; }
 
-        html { scroll-behavior: smooth; }
+        .sidebar { width: 240px; flex-shrink: 0; background: var(--dark); display: flex; flex-direction: column; padding: 24px 16px; position: sticky; top: 0; height: 100vh; z-index: 10; }
+        .logo { display: flex; align-items: center; gap: 8px; padding: 0 8px 28px; font-size: 22px; }
+        .logo-text { font-size: 20px; font-weight: 800; color: var(--orange); }
+        .sidenav { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+        .nav-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 11px 14px; background: none; border: none; border-radius: 10px; color: rgba(255,255,255,0.5); font-family: "Tajawal", sans-serif; font-size: 15px; font-weight: 500; cursor: pointer; transition: all 0.15s; text-align: right; }
+        .nav-item:hover { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.8); }
+        .nav-item.active { background: rgba(255,107,43,0.15); color: var(--orange); }
+        .nav-icon { font-size: 18px; }
+        .store-link { background: rgba(255,255,255,0.05); border-radius: 12px; padding: 14px; margin-top: auto; }
+        .store-link-label { font-size: 11px; color: rgba(255,255,255,0.4); margin-bottom: 4px; }
+        .store-link-url { font-size: 11px; color: rgba(255,255,255,0.7); word-break: break-all; margin-bottom: 10px; direction: ltr; }
+        .copy-btn { width: 100%; padding: 7px; background: rgba(255,107,43,0.2); border: 1px solid rgba(255,107,43,0.3); border-radius: 8px; color: var(--orange); font-family: "Tajawal", sans-serif; font-size: 13px; cursor: pointer; }
 
-        body {
-          background: var(--bg);
-          color: var(--text);
-          font-family: "Tajawal", sans-serif;
-          direction: rtl;
-          overflow-x: hidden;
-        }
+        .main { flex: 1; padding: 32px; min-width: 0; position: relative; z-index: 10; }
+        .header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 24px; }
+        .header-title { font-size: 26px; font-weight: 800; color: var(--dark); }
+        .header-sub { font-size: 14px; color: var(--muted); margin-top: 4px; }
+        .msg-badge { background: rgba(0,179,126,0.1); border: 1px solid rgba(0,179,126,0.2); color: var(--green); padding: 8px 16px; border-radius: 10px; font-size: 14px; font-weight: 600; }
 
-        .root { position: relative; min-height: 100vh; }
+        .loading { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 300px; gap: 16px; color: var(--muted); }
+        .spinner { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--orange); border-radius: 50%; animation: spin 0.7s linear infinite; }
 
-        .bg-pattern {
-          position: fixed; inset: 0;
-          background-image: radial-gradient(circle, rgba(255,107,43,0.06) 1px, transparent 1px);
-          background-size: 32px 32px;
-          pointer-events: none; z-index: 0;
-        }
+        .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+        .stat-card { background: white; border: 1px solid var(--border); border-radius: 14px; padding: 20px; }
+        .stat-label { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+        .stat-val { font-size: 24px; font-weight: 800; color: var(--dark); }
 
-        .glow-1 { position: fixed; top: -100px; right: -100px; width: 500px; height: 500px; background: radial-gradient(circle, rgba(255,107,43,0.12) 0%, transparent 65%); pointer-events: none; z-index: 0; }
-        .glow-2 { position: fixed; bottom: 0; left: -100px; width: 400px; height: 400px; background: radial-gradient(circle, rgba(255,140,66,0.08) 0%, transparent 65%); pointer-events: none; z-index: 0; }
-        .glow-3 { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 800px; height: 800px; background: radial-gradient(circle, rgba(255,107,43,0.04) 0%, transparent 65%); pointer-events: none; z-index: 0; }
+        .card { background: white; border: 1px solid var(--border); border-radius: 16px; padding: 28px; margin-bottom: 20px; }
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .card-title { font-size: 18px; font-weight: 700; color: var(--dark); margin-bottom: 20px; }
+        .card-header .card-title { margin-bottom: 0; }
 
-        /* NAV */
-        .nav { position: sticky; top: 0; z-index: 100; background: rgba(248,245,240,0.9); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
-        .nav-inner { max-width: 1100px; margin: 0 auto; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
-        .logo { display: flex; align-items: center; gap: 8px; }
-        .logo-icon { font-size: 22px; }
-        .logo-text { font-family: "Clash Display", "Tajawal", sans-serif; font-size: 20px; font-weight: 700; color: var(--dark); }
-        .nav-links { display: flex; gap: 24px; }
-        .nav-links a { font-size: 14px; color: var(--muted); text-decoration: none; transition: color 0.2s; font-weight: 500; }
-        .nav-links a:hover { color: var(--orange); }
-        .nav-cta { background: var(--dark); color: white; padding: 9px 20px; border-radius: 10px; font-size: 14px; font-weight: 700; text-decoration: none; transition: all 0.2s; font-family: "Tajawal", sans-serif; }
-        .nav-cta:hover { background: var(--orange); transform: translateY(-1px); }
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+        .field { display: flex; flex-direction: column; gap: 7px; }
+        .field.full { grid-column: span 2; }
+        .field label { font-size: 13px; font-weight: 600; color: var(--muted); }
+        .field input, .field textarea { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 11px 14px; color: var(--text); font-family: "Tajawal", sans-serif; font-size: 14px; outline: none; transition: border-color 0.2s; resize: none; }
+        .field input:focus, .field textarea:focus { border-color: var(--orange); background: white; }
 
-        /* HERO */
-        .hero { position: relative; z-index: 10; max-width: 900px; margin: 0 auto; padding: 80px 24px 60px; text-align: center; }
-        .hero-badge { display: inline-block; background: rgba(255,107,43,0.1); border: 1px solid rgba(255,107,43,0.2); color: var(--orange); padding: 6px 16px; border-radius: 20px; font-size: 13px; font-weight: 700; margin-bottom: 24px; animation: fadeUp 0.5s ease both; }
-        .hero-title { font-family: "Clash Display", "Tajawal", sans-serif; font-size: clamp(40px, 7vw, 72px); font-weight: 700; line-height: 1.1; color: var(--dark); margin-bottom: 20px; animation: fadeUp 0.5s ease 0.1s both; }
-        .highlight { color: var(--orange); position: relative; }
-        .hero-sub { font-size: clamp(16px, 2vw, 20px); color: var(--muted); line-height: 1.7; margin-bottom: 36px; animation: fadeUp 0.5s ease 0.2s both; }
+        .color-row { display: flex; gap: 10px; padding: 8px 0; }
+        .color-dot { width: 28px; height: 28px; border-radius: 50%; border: 3px solid transparent; cursor: pointer; transition: all 0.2s; }
+        .color-dot.active { border-color: var(--dark); transform: scale(1.2); }
 
-        .hero-stats { display: flex; align-items: center; justify-content: center; gap: 24px; margin-bottom: 40px; animation: fadeUp 0.5s ease 0.3s both; }
-        .stat { text-align: center; }
-        .stat-num { display: block; font-size: 22px; font-weight: 800; color: var(--dark); }
-        .stat-label { font-size: 12px; color: var(--muted); }
-        .stat-divider { width: 1px; height: 36px; background: var(--border); }
+        .save-btn { padding: 12px 28px; background: var(--orange); border: none; border-radius: 10px; color: white; font-family: "Tajawal", sans-serif; font-size: 15px; font-weight: 700; cursor: pointer; transition: all 0.2s; }
+        .save-btn:hover:not(:disabled) { background: #e55a1e; }
+        .save-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .add-btn { padding: 10px 20px; background: var(--dark); border: none; border-radius: 10px; color: white; font-family: "Tajawal", sans-serif; font-size: 14px; font-weight: 700; cursor: pointer; }
+        .cancel-btn { padding: 12px 20px; background: none; border: 1px solid var(--border); border-radius: 10px; color: var(--muted); font-family: "Tajawal", sans-serif; font-size: 15px; cursor: pointer; }
+        .form-btns { display: flex; gap: 10px; }
+        .add-form { background: var(--surface2); border-radius: 12px; padding: 20px; margin-bottom: 20px; }
 
-        .hero-cta { animation: fadeUp 0.5s ease 0.4s both; }
-        .email-form { display: flex; gap: 10px; max-width: 480px; margin: 0 auto 10px; }
-        .email-input { flex: 1; padding: 14px 18px; background: white; border: 1.5px solid var(--border); border-radius: 12px; font-family: "Tajawal", sans-serif; font-size: 15px; color: var(--text); outline: none; transition: border-color 0.2s; direction: ltr; }
-        .email-input:focus { border-color: var(--orange); }
-        .email-input::placeholder { color: var(--muted); }
-        .cta-btn { padding: 14px 28px; background: var(--orange); border: none; border-radius: 12px; color: white; font-family: "Tajawal", sans-serif; font-size: 16px; font-weight: 800; cursor: pointer; white-space: nowrap; transition: all 0.2s; }
-        .cta-btn:hover { background: #e55a1e; transform: translateY(-2px); box-shadow: 0 8px 25px rgba(255,107,43,0.3); }
-        .success-msg { background: rgba(0,179,126,0.1); border: 1px solid rgba(0,179,126,0.2); color: var(--green); padding: 16px 24px; border-radius: 12px; font-size: 16px; font-weight: 700; max-width: 400px; margin: 0 auto 10px; }
-        .cta-note { font-size: 12px; color: var(--muted); }
+        .empty { text-align: center; padding: 48px 24px; color: var(--muted); }
+        .empty-icon { font-size: 48px; margin-bottom: 12px; }
 
-        /* STORE PREVIEW */
-        .store-preview { margin-top: 60px; animation: fadeUp 0.6s ease 0.5s both; }
-        .store-card { background: white; border: 1px solid var(--border); border-radius: 20px; padding: 24px; max-width: 420px; margin: 0 auto; box-shadow: 0 20px 60px rgba(0,0,0,0.08); }
-        .store-header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
-        .store-avatar { font-size: 28px; width: 48px; height: 48px; background: rgba(255,107,43,0.1); border-radius: 12px; display: flex; align-items: center; justify-content: center; }
-        .store-name { font-size: 15px; font-weight: 700; color: var(--dark); }
-        .store-url { font-size: 12px; color: var(--orange); }
-        .store-badge { margin-right: auto; font-size: 12px; background: rgba(0,179,126,0.1); color: var(--green); padding: 4px 10px; border-radius: 20px; font-weight: 600; }
-        .store-products { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
-        .store-product { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--surface2); border-radius: 10px; font-size: 14px; }
-        .add-btn { background: var(--orange); color: white; border: none; padding: 5px 12px; border-radius: 8px; font-size: 12px; cursor: pointer; font-family: "Tajawal", sans-serif; }
-        .whatsapp-btn { width: 100%; padding: 12px; background: #25d366; border: none; border-radius: 12px; color: white; font-family: "Tajawal", sans-serif; font-size: 15px; font-weight: 700; cursor: pointer; }
+        .products-list { display: flex; flex-direction: column; gap: 12px; }
+        .product-item { display: flex; justify-content: space-between; align-items: center; padding: 16px; background: var(--surface2); border-radius: 12px; }
+        .product-name { font-size: 15px; font-weight: 700; color: var(--dark); margin-bottom: 4px; }
+        .product-price { font-size: 16px; font-weight: 800; color: var(--orange); margin-bottom: 4px; }
+        .product-desc { font-size: 12px; color: var(--muted); }
+        .product-actions { display: flex; gap: 8px; align-items: center; }
+        .toggle-btn { padding: 7px 14px; border-radius: 8px; border: none; font-family: "Tajawal", sans-serif; font-size: 13px; font-weight: 600; cursor: pointer; }
+        .toggle-btn.available { background: rgba(0,179,126,0.1); color: var(--green); }
+        .toggle-btn.unavailable { background: rgba(225,29,72,0.1); color: var(--red); }
+        .delete-btn { background: none; border: none; cursor: pointer; font-size: 16px; padding: 6px; border-radius: 8px; transition: background 0.15s; }
+        .delete-btn:hover { background: rgba(225,29,72,0.1); }
 
-        /* SECTIONS */
-        .section { position: relative; z-index: 10; max-width: 1100px; margin: 0 auto; padding: 80px 24px; text-align: center; }
-        .section-tag { display: inline-block; background: rgba(255,107,43,0.1); color: var(--orange); padding: 5px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; margin-bottom: 16px; letter-spacing: 0.08em; }
-        .section-title { font-family: "Clash Display", "Tajawal", sans-serif; font-size: clamp(28px, 4vw, 44px); font-weight: 700; color: var(--dark); line-height: 1.2; margin-bottom: 48px; }
+        .orders-list { display: flex; flex-direction: column; gap: 12px; }
+        .order-item { display: flex; justify-content: space-between; align-items: center; padding: 16px; background: var(--surface2); border-radius: 12px; }
+        .order-name { font-size: 15px; font-weight: 700; color: var(--dark); }
+        .order-phone { font-size: 13px; color: var(--muted); direction: ltr; }
+        .order-date { font-size: 12px; color: var(--muted); }
+        .order-right { text-align: left; }
+        .order-total { font-size: 18px; font-weight: 800; color: var(--orange); margin-bottom: 6px; }
+        .order-status { font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 20px; }
+        .order-status.pending { background: rgba(245,158,11,0.1); color: #d97706; }
+        .order-status.completed { background: rgba(0,179,126,0.1); color: var(--green); }
+        .order-status.cancelled { background: rgba(225,29,72,0.1); color: var(--red); }
 
-        /* FEATURES */
-        .features-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
-        .feature-card { background: white; border: 1px solid var(--border); border-radius: 16px; padding: 28px 24px; text-align: right; transition: all 0.2s; }
-        .feature-card:hover { transform: translateY(-4px); box-shadow: 0 12px 40px rgba(0,0,0,0.08); border-color: rgba(255,107,43,0.2); }
-        .feature-icon { font-size: 32px; display: block; margin-bottom: 14px; }
-        .feature-title { font-size: 17px; font-weight: 700; color: var(--dark); margin-bottom: 8px; }
-        .feature-desc { font-size: 14px; color: var(--muted); line-height: 1.6; }
-
-        /* STEPS */
-        .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
-        .step { text-align: center; position: relative; }
-        .step-num { font-family: "Clash Display", sans-serif; font-size: 48px; font-weight: 700; color: rgba(255,107,43,0.15); margin-bottom: 12px; }
-        .step-line { display: none; }
-        .step-title { font-size: 17px; font-weight: 700; color: var(--dark); margin-bottom: 8px; }
-        .step-desc { font-size: 14px; color: var(--muted); }
-
-        /* PRICING */
-        .plans-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
-        .plan-card { background: white; border: 1px solid var(--border); border-radius: 20px; padding: 32px 28px; text-align: right; position: relative; transition: all 0.2s; }
-        .plan-featured { border-color: var(--orange); border-width: 2px; transform: scale(1.03); box-shadow: 0 20px 60px rgba(255,107,43,0.15); }
-        .plan-popular { position: absolute; top: -14px; left: 50%; transform: translateX(-50%); background: var(--orange); color: white; font-size: 12px; font-weight: 700; padding: 4px 16px; border-radius: 20px; white-space: nowrap; }
-        .plan-name { font-size: 20px; font-weight: 800; color: var(--dark); margin-bottom: 12px; }
-        .plan-price { margin-bottom: 24px; }
-        .plan-amount { font-size: 40px; font-weight: 900; color: var(--dark); }
-        .plan-period { font-size: 14px; color: var(--muted); margin-right: 4px; }
-        .plan-features { list-style: none; display: flex; flex-direction: column; gap: 10px; margin-bottom: 28px; }
-        .plan-features li { font-size: 14px; color: var(--text); display: flex; align-items: center; gap: 8px; }
-        .plan-cta { width: 100%; padding: 13px; background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; color: var(--dark); font-family: "Tajawal", sans-serif; font-size: 15px; font-weight: 700; cursor: pointer; transition: all 0.2s; }
-        .plan-cta:hover { background: var(--dark); color: white; }
-        .plan-cta-featured { background: var(--orange); border-color: var(--orange); color: white; }
-        .plan-cta-featured:hover { background: #e55a1e; }
-
-        /* FINAL CTA */
-        .final-cta { position: relative; z-index: 10; background: var(--dark); margin: 40px 24px; border-radius: 24px; padding: 80px 24px; text-align: center; overflow: hidden; }
-        .final-cta::before { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at 30% 50%, rgba(255,107,43,0.2) 0%, transparent 60%); pointer-events: none; }
-        .final-title { font-family: "Clash Display", "Tajawal", sans-serif; font-size: clamp(28px, 4vw, 48px); font-weight: 700; color: white; margin-bottom: 12px; }
-        .final-sub { font-size: 16px; color: rgba(255,255,255,0.6); margin-bottom: 32px; }
-        .final-btn { display: inline-block; background: var(--orange); color: white; padding: 16px 36px; border-radius: 14px; font-size: 18px; font-weight: 800; text-decoration: none; transition: all 0.2s; font-family: "Tajawal", sans-serif; }
-        .final-btn:hover { background: var(--orange2); transform: translateY(-2px); box-shadow: 0 8px 30px rgba(255,107,43,0.4); }
-
-        /* FOOTER */
-        .footer { position: relative; z-index: 10; text-align: center; padding: 40px 24px; border-top: 1px solid var(--border); }
-        .footer-logo { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 20px; font-weight: 700; color: var(--dark); margin-bottom: 8px; }
-        .footer-text { font-size: 14px; color: var(--muted); margin-bottom: 4px; }
-        .footer-copy { font-size: 12px; color: var(--muted); opacity: 0.6; }
-
-        @keyframes fadeUp {
-          from { opacity: 0; transform: translateY(20px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
+        @keyframes spin { to { transform: rotate(360deg); } }
 
         @media (max-width: 768px) {
-          .nav-links { display: none; }
-          .features-grid { grid-template-columns: 1fr; }
-          .steps { grid-template-columns: repeat(2, 1fr); }
-          .plans-grid { grid-template-columns: 1fr; }
-          .plan-featured { transform: scale(1); }
-          .email-form { flex-direction: column; }
-          .hero-stats { gap: 16px; }
-          .stat-num { font-size: 18px; }
+          .sidebar { display: none; }
+          .main { padding: 20px 16px; }
+          .stats { grid-template-columns: repeat(2, 1fr); }
+          .form-grid { grid-template-columns: 1fr; }
+          .field.full { grid-column: span 1; }
         }
       `}</style>
     </>
