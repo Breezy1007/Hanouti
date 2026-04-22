@@ -9,34 +9,39 @@ export default function Dashboard() {
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
   const [msg, setMsg] = useState("");
-
   const [storeName, setStoreName] = useState("");
   const [storeDesc, setStoreDesc] = useState("");
   const [storePhone, setStorePhone] = useState("");
   const [storeColor, setStoreColor] = useState("#ff6b2b");
-
   const [prodName, setProdName] = useState("");
   const [prodPrice, setProdPrice] = useState("");
   const [prodDesc, setProdDesc] = useState("");
   const [showAddProd, setShowAddProd] = useState(false);
+  const [storeUrl, setStoreUrl] = useState("");
 
   useEffect(() => {
     const s = localStorage.getItem("hanouti_store");
     const p = localStorage.getItem("hanouti_products");
     const o = localStorage.getItem("hanouti_orders");
     if (s) {
-      const store = JSON.parse(s);
-      setStore(store);
-      setStoreName(store.name || "");
-      setStoreDesc(store.description || "");
-      setStorePhone(store.phone || "");
-      setStoreColor(store.color || "#ff6b2b");
+      const parsed = JSON.parse(s);
+      setStore(parsed);
+      setStoreName(parsed.name || "");
+      setStoreDesc(parsed.description || "");
+      setStorePhone(parsed.phone || "");
+      setStoreColor(parsed.color || "#ff6b2b");
+      setStoreUrl(window.location.origin + "/store/" + parsed.id);
     }
     if (p) setProducts(JSON.parse(p));
     if (o) setOrders(JSON.parse(o));
   }, []);
 
   const saveStore = () => {
+    if (!storeName || !storePhone) {
+      setMsg("⚠️ الاسم ورقم الواتساب مطلوبين!");
+      setTimeout(() => setMsg(""), 3000);
+      return;
+    }
     const newStore = {
       id: store?.id || Date.now().toString(),
       name: storeName,
@@ -46,12 +51,17 @@ export default function Dashboard() {
     };
     localStorage.setItem("hanouti_store", JSON.stringify(newStore));
     setStore(newStore);
+    setStoreUrl(window.location.origin + "/store/" + newStore.id);
     setMsg("✅ تم الحفظ!");
     setTimeout(() => setMsg(""), 2000);
   };
 
   const addProduct = () => {
-    if (!prodName || !prodPrice) return;
+    if (!prodName || !prodPrice) {
+      setMsg("⚠️ الاسم والسعر مطلوبين!");
+      setTimeout(() => setMsg(""), 3000);
+      return;
+    }
     const newProd = {
       id: Date.now().toString(),
       name: prodName,
@@ -80,13 +90,18 @@ export default function Dashboard() {
     setProducts(updated);
   };
 
-  const storeUrl = store ? `${window.location.origin}/store/${store.id}` : "";
+  const copyLink = () => {
+    navigator.clipboard.writeText(storeUrl);
+    setMsg("✅ تم نسخ الرابط!");
+    setTimeout(() => setMsg(""), 2000);
+  };
+
   const totalRevenue = orders.reduce((s, o) => s + (o.total || 0), 0);
 
   return (
     <>
       <Head>
-        <title>Hanouti — Dashboard</title>
+        <title>Hanouti — لوحة التحكم</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet" />
       </Head>
@@ -107,13 +122,12 @@ export default function Dashboard() {
               </button>
             ))}
           </nav>
-          {store && (
+          {store && storeUrl && (
             <div className="store-link">
               <p className="store-link-label">رابط متجرك</p>
-              <p className="store-link-url">/store/{store.id}</p>
-              <button className="copy-btn" onClick={() => { navigator.clipboard.writeText(storeUrl); setMsg("✅ تم النسخ!"); setTimeout(() => setMsg(""), 2000); }}>
-                نسخ الرابط 📋
-              </button>
+              <p className="store-link-url">{storeUrl}</p>
+              <button className="copy-btn" onClick={copyLink}>نسخ الرابط 📋</button>
+              <a className="open-btn" href={storeUrl} target="_blank" rel="noreferrer">فتح المتجر ↗</a>
             </div>
           )}
         </aside>
@@ -128,7 +142,7 @@ export default function Dashboard() {
                 {tab === "المتجر" ? "خصص متجرك كيفما تبغي" : tab === "المنتجات" ? `${products.length} منتج` : `${orders.length} طلب`}
               </p>
             </div>
-            {msg && <div className="msg-badge">{msg}</div>}
+            {msg && <div className={`msg-badge ${msg.includes("⚠️") ? "msg-warn" : ""}`}>{msg}</div>}
           </div>
 
           <div className="stats">
@@ -148,7 +162,7 @@ export default function Dashboard() {
                 </div>
                 <div className="field">
                   <label>رقم الواتساب *</label>
-                  <input value={storePhone} onChange={e => setStorePhone(e.target.value)} placeholder="0612345678" dir="ltr" />
+                  <input value={storePhone} onChange={e => setStorePhone(e.target.value)} placeholder="212612345678" dir="ltr" />
                 </div>
                 <div className="field full">
                   <label>وصف المتجر</label>
@@ -171,7 +185,9 @@ export default function Dashboard() {
             <div className="card">
               <div className="card-header">
                 <h2 className="card-title">قائمة المنتجات</h2>
-                <button className="add-btn" onClick={() => setShowAddProd(!showAddProd)}>+ إضافة منتج</button>
+                <button className="add-btn" onClick={() => setShowAddProd(!showAddProd)}>
+                  {showAddProd ? "إلغاء ✕" : "+ إضافة منتج"}
+                </button>
               </div>
               {showAddProd && (
                 <div className="add-form">
@@ -189,10 +205,7 @@ export default function Dashboard() {
                       <input value={prodDesc} onChange={e => setProdDesc(e.target.value)} placeholder="وصف مختصر..." />
                     </div>
                   </div>
-                  <div className="form-btns">
-                    <button className="save-btn" onClick={addProduct}>إضافة المنتج ✓</button>
-                    <button className="cancel-btn" onClick={() => setShowAddProd(false)}>إلغاء</button>
-                  </div>
+                  <button className="save-btn" onClick={addProduct}>إضافة المنتج ✓</button>
                 </div>
               )}
               {products.length === 0 ? (
@@ -223,7 +236,7 @@ export default function Dashboard() {
             <div className="card">
               <h2 className="card-title">الطلبات</h2>
               {orders.length === 0 ? (
-                <div className="empty"><p className="empty-icon">🛍️</p><p>ما كاين حتى طلب بعد!</p></div>
+                <div className="empty"><p className="empty-icon">🛍️</p><p>ما كاين حتى طلب بعد — شارك رابط متجرك!</p></div>
               ) : (
                 <div className="orders-list">
                   {orders.map((o, i) => (
@@ -231,8 +244,12 @@ export default function Dashboard() {
                       <div>
                         <p className="order-name">{o.customer_name}</p>
                         <p className="order-phone">{o.customer_phone}</p>
+                        <p className="order-date">{o.date ? new Date(o.date).toLocaleDateString("ar-MA") : ""}</p>
                       </div>
-                      <p className="order-total">{o.total} درهم</p>
+                      <div>
+                        <p className="order-total">{o.total} درهم</p>
+                        <span className="order-status">جديد</span>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -266,15 +283,17 @@ export default function Dashboard() {
         .nav-item:hover { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.8); }
         .nav-item.active { background: rgba(255,107,43,0.15); color: var(--orange); }
         .nav-icon { font-size: 18px; }
-        .store-link { background: rgba(255,255,255,0.05); border-radius: 12px; padding: 14px; margin-top: auto; }
-        .store-link-label { font-size: 11px; color: rgba(255,255,255,0.4); margin-bottom: 4px; }
-        .store-link-url { font-size: 11px; color: rgba(255,255,255,0.7); word-break: break-all; margin-bottom: 10px; direction: ltr; }
-        .copy-btn { width: 100%; padding: 7px; background: rgba(255,107,43,0.2); border: 1px solid rgba(255,107,43,0.3); border-radius: 8px; color: var(--orange); font-family: "Tajawal", sans-serif; font-size: 13px; cursor: pointer; }
-        .main { flex: 1; padding: 32px; min-width: 0; position: relative; z-index: 10; padding-bottom: 80px; }
-        .header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 24px; }
+        .store-link { background: rgba(255,255,255,0.05); border-radius: 12px; padding: 14px; margin-top: auto; display: flex; flex-direction: column; gap: 8px; }
+        .store-link-label { font-size: 11px; color: rgba(255,255,255,0.4); }
+        .store-link-url { font-size: 10px; color: rgba(255,255,255,0.6); word-break: break-all; direction: ltr; }
+        .copy-btn { width: 100%; padding: 7px; background: rgba(255,107,43,0.2); border: 1px solid rgba(255,107,43,0.3); border-radius: 8px; color: var(--orange); font-family: "Tajawal", sans-serif; font-size: 12px; cursor: pointer; }
+        .open-btn { width: 100%; padding: 7px; background: rgba(0,179,126,0.15); border: 1px solid rgba(0,179,126,0.3); border-radius: 8px; color: #00b37e; font-family: "Tajawal", sans-serif; font-size: 12px; cursor: pointer; text-align: center; text-decoration: none; }
+        .main { flex: 1; padding: 32px 32px 80px; min-width: 0; position: relative; z-index: 10; }
+        .header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
         .header-title { font-size: 26px; font-weight: 800; color: var(--dark); }
         .header-sub { font-size: 14px; color: var(--muted); margin-top: 4px; }
         .msg-badge { background: rgba(0,179,126,0.1); border: 1px solid rgba(0,179,126,0.2); color: var(--green); padding: 8px 16px; border-radius: 10px; font-size: 14px; font-weight: 600; }
+        .msg-badge.msg-warn { background: rgba(245,158,11,0.1); border-color: rgba(245,158,11,0.2); color: #d97706; }
         .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
         .stat-card { background: white; border: 1px solid var(--border); border-radius: 14px; padding: 20px; }
         .stat-label { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
@@ -289,14 +308,12 @@ export default function Dashboard() {
         .field label { font-size: 13px; font-weight: 600; color: var(--muted); }
         .field input, .field textarea { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 11px 14px; color: var(--text); font-family: "Tajawal", sans-serif; font-size: 14px; outline: none; transition: border-color 0.2s; resize: none; }
         .field input:focus, .field textarea:focus { border-color: var(--orange); background: white; }
-        .color-row { display: flex; gap: 10px; padding: 8px 0; }
-        .color-dot { width: 28px; height: 28px; border-radius: 50%; border: 3px solid transparent; cursor: pointer; transition: all 0.2s; }
+        .color-row { display: flex; gap: 10px; padding: 8px 0; flex-wrap: wrap; }
+        .color-dot { width: 30px; height: 30px; border-radius: 50%; border: 3px solid transparent; cursor: pointer; transition: all 0.2s; }
         .color-dot.active { border-color: var(--dark); transform: scale(1.2); }
         .save-btn { padding: 12px 28px; background: var(--orange); border: none; border-radius: 10px; color: white; font-family: "Tajawal", sans-serif; font-size: 15px; font-weight: 700; cursor: pointer; transition: all 0.2s; }
         .save-btn:hover { background: #e55a1e; }
         .add-btn { padding: 10px 20px; background: var(--dark); border: none; border-radius: 10px; color: white; font-family: "Tajawal", sans-serif; font-size: 14px; font-weight: 700; cursor: pointer; }
-        .cancel-btn { padding: 12px 20px; background: none; border: 1px solid var(--border); border-radius: 10px; color: var(--muted); font-family: "Tajawal", sans-serif; font-size: 15px; cursor: pointer; }
-        .form-btns { display: flex; gap: 10px; }
         .add-form { background: var(--surface2); border-radius: 12px; padding: 20px; margin-bottom: 20px; }
         .empty { text-align: center; padding: 48px 24px; color: var(--muted); }
         .empty-icon { font-size: 48px; margin-bottom: 12px; }
@@ -305,27 +322,30 @@ export default function Dashboard() {
         .product-name { font-size: 15px; font-weight: 700; color: var(--dark); margin-bottom: 4px; }
         .product-price { font-size: 16px; font-weight: 800; color: var(--orange); margin-bottom: 4px; }
         .product-desc { font-size: 12px; color: var(--muted); }
-        .product-actions { display: flex; gap: 8px; align-items: center; }
-        .toggle-btn { padding: 7px 14px; border-radius: 8px; border: none; font-family: "Tajawal", sans-serif; font-size: 13px; font-weight: 600; cursor: pointer; }
+        .product-actions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+        .toggle-btn { padding: 7px 14px; border-radius: 8px; border: none; font-family: "Tajawal", sans-serif; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
         .toggle-btn.available { background: rgba(0,179,126,0.1); color: var(--green); }
         .toggle-btn.unavailable { background: rgba(225,29,72,0.1); color: var(--red); }
-        .delete-btn { background: none; border: none; cursor: pointer; font-size: 16px; padding: 6px; border-radius: 8px; }
+        .delete-btn { background: none; border: none; cursor: pointer; font-size: 18px; padding: 6px; border-radius: 8px; }
         .orders-list { display: flex; flex-direction: column; gap: 12px; }
         .order-item { display: flex; justify-content: space-between; align-items: center; padding: 16px; background: var(--surface2); border-radius: 12px; }
         .order-name { font-size: 15px; font-weight: 700; color: var(--dark); }
         .order-phone { font-size: 13px; color: var(--muted); direction: ltr; }
-        .order-total { font-size: 18px; font-weight: 800; color: var(--orange); }
+        .order-date { font-size: 12px; color: var(--muted); }
+        .order-total { font-size: 18px; font-weight: 800; color: var(--orange); margin-bottom: 4px; text-align: left; }
+        .order-status { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 20px; background: rgba(245,158,11,0.1); color: #d97706; }
         .mobile-nav { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: var(--dark); border-top: 1px solid rgba(255,255,255,0.1); z-index: 100; padding: 8px 0; }
-        .mobile-nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; background: none; border: none; color: rgba(255,255,255,0.5); font-family: "Tajawal", sans-serif; font-size: 11px; cursor: pointer; padding: 6px; }
+        .mobile-nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; background: none; border: none; color: rgba(255,255,255,0.5); font-family: "Tajawal", sans-serif; font-size: 11px; cursor: pointer; padding: 6px; transition: color 0.15s; }
         .mobile-nav-item.active { color: var(--orange); }
-        .mobile-nav-item span:first-child { font-size: 20px; }
+        .mobile-nav-item span:first-child { font-size: 22px; }
         @media (max-width: 768px) {
           .sidebar { display: none; }
           .mobile-nav { display: flex !important; }
-          .main { padding: 20px 16px 80px; }
+          .main { padding: 20px 16px 90px; }
           .stats { grid-template-columns: repeat(2, 1fr); }
           .form-grid { grid-template-columns: 1fr; }
           .field.full { grid-column: span 1; }
+          .header-title { font-size: 20px; }
         }
       `}</style>
     </>
