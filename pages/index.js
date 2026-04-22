@@ -111,7 +111,14 @@ export default function Dashboard() {
 
       <div className="root">
         <div className="bg-glow" />
-
+    <div className="mobile-nav">
+  {TABS.map(t => (
+    <button key={t} className={`mobile-nav-item ${tab === t ? "active" : ""}`} onClick={() => setTab(t)}>
+      <span>{t === "المتجر" ? "🏪" : t === "المنتجات" ? "📦" : "🛍️"}</span>
+      <span>{t}</span>
+    </button>
+  ))}
+</div>
         {/* Sidebar */}
         <aside className="sidebar">
           <div className="logo">
@@ -406,11 +413,15 @@ export default function Dashboard() {
         .order-status.pending { background: rgba(245,158,11,0.1); color: #d97706; }
         .order-status.completed { background: rgba(0,179,126,0.1); color: var(--green); }
         .order-status.cancelled { background: rgba(225,29,72,0.1); color: var(--red); }
-
+.mobile-nav { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: var(--dark); border-top: 1px solid rgba(255,255,255,0.1); z-index: 100; padding: 8px 0; }
+.mobile-nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; background: none; border: none; color: rgba(255,255,255,0.5); font-family: "Tajawal", sans-serif; font-size: 11px; cursor: pointer; padding: 6px; }
+.mobile-nav-item.active { color: var(--orange); }
+.mobile-nav-item span:first-child { font-size: 20px; }
         @keyframes spin { to { transform: rotate(360deg); } }
 
         @media (max-width: 768px) {
-          .sidebar { display: none; }
+  .sidebar { display: none; }
+  .mobile-nav { display: flex !important; }
           .main { padding: 20px 16px; }
           .stats { grid-template-columns: repeat(2, 1fr); }
           .form-grid { grid-template-columns: 1fr; }
