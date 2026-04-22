@@ -3,8 +3,8 @@ import Head from "next/head";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  "https://bcbfbghmgavxhehhqbyc.supabase.co",
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJjYmZiZ2htZ2F2eGhlaGhxYnljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3NTM3ODMsImV4cCI6MjA5MjMyOTc4M30.gYadQRtC6VY3U6X3RzMsR1PjL9aPN5CKFDRqaEYjLsU"
 );
 
 const TABS = ["المتجر", "المنتجات", "الطلبات"];
