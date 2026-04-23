@@ -1,5 +1,13 @@
 import { useState, useEffect } from "react";
 import Head from "next/head";
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  "https://bcbfbghmgavxhehhqbyc.supabase.co",
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJjYmZiZ2htZ2F2eGhlaGhxYnljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3NTM3ODMsImV4cCI6MjA5MjMyOTc4M30.gYadQRtC6VY3U6X3RzMsR1PjL9aPN5CKFDRqaEYjLsU"
+);
+
+const USER_ID = typeof window !== "undefined" ? (localStorage.getItem("hanouti_uid") || (() => { const id = "u_" + Date.now(); localStorage.setItem("hanouti_uid", id); return id; })()) : "ssr";
 
 const TABS = ["المتجر", "المنتجات", "الطلبات"];
 
@@ -9,6 +17,7 @@ export default function Dashboard() {
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
   const [msg, setMsg] = useState("");
+  const [loading, setLoading] = useState(true);
   const [storeName, setStoreName] = useState("");
   const [storeDesc, setStoreDesc] = useState("");
   const [storePhone, setStorePhone] = useState("");
@@ -17,85 +26,66 @@ export default function Dashboard() {
   const [prodPrice, setProdPrice] = useState("");
   const [prodDesc, setProdDesc] = useState("");
   const [showAddProd, setShowAddProd] = useState(false);
-  const [storeUrl, setStoreUrl] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    const s = localStorage.getItem("hanouti_store");
-    const p = localStorage.getItem("hanouti_products");
-    const o = localStorage.getItem("hanouti_orders");
+  const showMsg = (m) => { setMsg(m); setTimeout(() => setMsg(""), 3000); };
+
+  useEffect(() => { loadData(); }, []);
+
+  const loadData = async () => {
+    setLoading(true);
+    const uid = localStorage.getItem("hanouti_uid") || (() => { const id = "u_" + Date.now(); localStorage.setItem("hanouti_uid", id); return id; })();
+    const { data: s } = await supabase.from("stores").select("*").eq("user_id", uid).maybeSingle();
     if (s) {
-      const parsed = JSON.parse(s);
-      setStore(parsed);
-      setStoreName(parsed.name || "");
-      setStoreDesc(parsed.description || "");
-      setStorePhone(parsed.phone || "");
-      setStoreColor(parsed.color || "#ff6b2b");
-      setStoreUrl(window.location.origin + "/store/" + parsed.id);
+      setStore(s);
+      setStoreName(s.name || "");
+      setStoreDesc(s.description || "");
+      setStorePhone(s.phone || "");
+      setStoreColor(s.color || "#ff6b2b");
+      const { data: p } = await supabase.from("products").select("*").eq("store_id", s.id).order("created_at", { ascending: false });
+      setProducts(p || []);
+      const { data: o } = await supabase.from("orders").select("*").eq("store_id", s.id).order("created_at", { ascending: false });
+      setOrders(o || []);
     }
-    if (p) setProducts(JSON.parse(p));
-    if (o) setOrders(JSON.parse(o));
-  }, []);
-
-  const saveStore = () => {
-    if (!storeName || !storePhone) {
-      setMsg("⚠️ الاسم ورقم الواتساب مطلوبين!");
-      setTimeout(() => setMsg(""), 3000);
-      return;
-    }
-    const newStore = {
-      id: store?.id || Date.now().toString(),
-      name: storeName,
-      description: storeDesc,
-      phone: storePhone,
-      color: storeColor,
-    };
-    localStorage.setItem("hanouti_store", JSON.stringify(newStore));
-    setStore(newStore);
-    setStoreUrl(window.location.origin + "/store/" + newStore.id);
-    setMsg("✅ تم الحفظ!");
-    setTimeout(() => setMsg(""), 2000);
+    setLoading(false);
   };
 
-  const addProduct = () => {
-    if (!prodName || !prodPrice) {
-      setMsg("⚠️ الاسم والسعر مطلوبين!");
-      setTimeout(() => setMsg(""), 3000);
-      return;
+  const saveStore = async () => {
+    if (!storeName || !storePhone) { showMsg("⚠️ الاسم ورقم الواتساب مطلوبين!"); return; }
+    setSaving(true);
+    const uid = localStorage.getItem("hanouti_uid");
+    if (store) {
+      await supabase.from("stores").update({ name: storeName, description: storeDesc, phone: storePhone, color: storeColor }).eq("id", store.id);
+    } else {
+      const { data } = await supabase.from("stores").insert({ user_id: uid, name: storeName, description: storeDesc, phone: storePhone, color: storeColor }).select().single();
+      setStore(data);
     }
-    const newProd = {
-      id: Date.now().toString(),
-      name: prodName,
-      price: parseFloat(prodPrice),
-      description: prodDesc,
-      available: true,
-    };
-    const updated = [newProd, ...products];
-    localStorage.setItem("hanouti_products", JSON.stringify(updated));
-    setProducts(updated);
+    setSaving(false);
+    showMsg("✅ تم الحفظ!");
+    loadData();
+  };
+
+  const addProduct = async () => {
+    if (!prodName || !prodPrice) { showMsg("⚠️ الاسم والسعر مطلوبين!"); return; }
+    if (!store) { showMsg("⚠️ احفظ المتجر أولاً!"); return; }
+    await supabase.from("products").insert({ store_id: store.id, name: prodName, price: parseFloat(prodPrice), description: prodDesc, available: true });
     setProdName(""); setProdPrice(""); setProdDesc("");
     setShowAddProd(false);
-    setMsg("✅ تم إضافة المنتج!");
-    setTimeout(() => setMsg(""), 2000);
+    showMsg("✅ تم إضافة المنتج!");
+    loadData();
   };
 
-  const toggleProduct = (id) => {
-    const updated = products.map(p => p.id === id ? { ...p, available: !p.available } : p);
-    localStorage.setItem("hanouti_products", JSON.stringify(updated));
-    setProducts(updated);
+  const toggleProduct = async (id, available) => {
+    await supabase.from("products").update({ available: !available }).eq("id", id);
+    loadData();
   };
 
-  const deleteProduct = (id) => {
-    const updated = products.filter(p => p.id !== id);
-    localStorage.setItem("hanouti_products", JSON.stringify(updated));
-    setProducts(updated);
+  const deleteProduct = async (id) => {
+    await supabase.from("products").delete().eq("id", id);
+    loadData();
   };
 
-  const copyLink = () => {
-    navigator.clipboard.writeText(storeUrl);
-    setMsg("✅ تم نسخ الرابط!");
-    setTimeout(() => setMsg(""), 2000);
-  };
-
+  const storeUrl = store ? `${typeof window !== "undefined" ? window.location.origin : ""}/store/${store.id}` : "";
   const totalRevenue = orders.reduce((s, o) => s + (o.total || 0), 0);
 
   return (
@@ -110,10 +100,7 @@ export default function Dashboard() {
         <div className="bg-glow" />
 
         <aside className="sidebar">
-          <div className="logo">
-            <span>🏪</span>
-            <span className="logo-text">Hanouti</span>
-          </div>
+          <div className="logo"><span>🏪</span><span className="logo-text">Hanouti</span></div>
           <nav className="sidenav">
             {TABS.map(t => (
               <button key={t} className={`nav-item ${tab === t ? "active" : ""}`} onClick={() => setTab(t)}>
@@ -126,7 +113,7 @@ export default function Dashboard() {
             <div className="store-link">
               <p className="store-link-label">رابط متجرك</p>
               <p className="store-link-url">{storeUrl}</p>
-              <button className="copy-btn" onClick={copyLink}>نسخ الرابط 📋</button>
+              <button className="copy-btn" onClick={() => { navigator.clipboard.writeText(storeUrl); showMsg("✅ تم النسخ!"); }}>نسخ الرابط 📋</button>
               <a className="open-btn" href={storeUrl} target="_blank" rel="noreferrer">فتح المتجر ↗</a>
             </div>
           )}
@@ -135,126 +122,124 @@ export default function Dashboard() {
         <main className="main">
           <div className="header">
             <div>
-              <h1 className="header-title">
-                {tab === "المتجر" ? "إعدادات المتجر" : tab === "المنتجات" ? "المنتجات" : "الطلبات"}
-              </h1>
-              <p className="header-sub">
-                {tab === "المتجر" ? "خصص متجرك كيفما تبغي" : tab === "المنتجات" ? `${products.length} منتج` : `${orders.length} طلب`}
-              </p>
+              <h1 className="header-title">{tab === "المتجر" ? "إعدادات المتجر" : tab === "المنتجات" ? "المنتجات" : "الطلبات"}</h1>
+              <p className="header-sub">{tab === "المتجر" ? "خصص متجرك كيفما تبغي" : tab === "المنتجات" ? `${products.length} منتج` : `${orders.length} طلب`}</p>
             </div>
             {msg && <div className={`msg-badge ${msg.includes("⚠️") ? "msg-warn" : ""}`}>{msg}</div>}
           </div>
 
-          <div className="stats">
-            <div className="stat-card"><p className="stat-label">المنتجات</p><p className="stat-val">{products.length}</p></div>
-            <div className="stat-card"><p className="stat-label">الطلبات</p><p className="stat-val">{orders.length}</p></div>
-            <div className="stat-card"><p className="stat-label">المبيعات</p><p className="stat-val">{totalRevenue} درهم</p></div>
-            <div className="stat-card"><p className="stat-label">متاح</p><p className="stat-val">{products.filter(p => p.available).length}</p></div>
-          </div>
-
-          {tab === "المتجر" && (
-            <div className="card">
-              <h2 className="card-title">معلومات المتجر</h2>
-              <div className="form-grid">
-                <div className="field">
-                  <label>اسم المتجر *</label>
-                  <input value={storeName} onChange={e => setStoreName(e.target.value)} placeholder="مثال: متجر سلمى للملابس" />
-                </div>
-                <div className="field">
-                  <label>رقم الواتساب *</label>
-                  <input value={storePhone} onChange={e => setStorePhone(e.target.value)} placeholder="212612345678" dir="ltr" />
-                </div>
-                <div className="field full">
-                  <label>وصف المتجر</label>
-                  <textarea value={storeDesc} onChange={e => setStoreDesc(e.target.value)} placeholder="اكتب وصفاً لمتجرك..." rows={3} />
-                </div>
-                <div className="field">
-                  <label>لون المتجر</label>
-                  <div className="color-row">
-                    {["#ff6b2b", "#7c3aed", "#00b37e", "#0ea5e9", "#e11d48", "#f59e0b"].map(c => (
-                      <button key={c} className={`color-dot ${storeColor === c ? "active" : ""}`} style={{ background: c }} onClick={() => setStoreColor(c)} />
-                    ))}
-                  </div>
-                </div>
+          {loading ? (
+            <div className="loading"><div className="spinner" /><p>جاري التحميل...</p></div>
+          ) : (
+            <>
+              <div className="stats">
+                <div className="stat-card"><p className="stat-label">المنتجات</p><p className="stat-val">{products.length}</p></div>
+                <div className="stat-card"><p className="stat-label">الطلبات</p><p className="stat-val">{orders.length}</p></div>
+                <div className="stat-card"><p className="stat-label">المبيعات</p><p className="stat-val">{totalRevenue} درهم</p></div>
+                <div className="stat-card"><p className="stat-label">متاح</p><p className="stat-val">{products.filter(p => p.available).length}</p></div>
               </div>
-              <button className="save-btn" onClick={saveStore}>حفظ المتجر ✓</button>
-            </div>
-          )}
 
-          {tab === "المنتجات" && (
-            <div className="card">
-              <div className="card-header">
-                <h2 className="card-title">قائمة المنتجات</h2>
-                <button className="add-btn" onClick={() => setShowAddProd(!showAddProd)}>
-                  {showAddProd ? "إلغاء ✕" : "+ إضافة منتج"}
-                </button>
-              </div>
-              {showAddProd && (
-                <div className="add-form">
+              {tab === "المتجر" && (
+                <div className="card">
+                  <h2 className="card-title">معلومات المتجر</h2>
                   <div className="form-grid">
                     <div className="field">
-                      <label>اسم المنتج *</label>
-                      <input value={prodName} onChange={e => setProdName(e.target.value)} placeholder="مثال: فستان صيفي" />
+                      <label>اسم المتجر *</label>
+                      <input value={storeName} onChange={e => setStoreName(e.target.value)} placeholder="مثال: متجر سلمى للملابس" />
                     </div>
                     <div className="field">
-                      <label>السعر (درهم) *</label>
-                      <input value={prodPrice} onChange={e => setProdPrice(e.target.value)} placeholder="299" type="number" dir="ltr" />
+                      <label>رقم الواتساب *</label>
+                      <input value={storePhone} onChange={e => setStorePhone(e.target.value)} placeholder="212612345678" dir="ltr" />
                     </div>
                     <div className="field full">
-                      <label>الوصف</label>
-                      <input value={prodDesc} onChange={e => setProdDesc(e.target.value)} placeholder="وصف مختصر..." />
+                      <label>وصف المتجر</label>
+                      <textarea value={storeDesc} onChange={e => setStoreDesc(e.target.value)} placeholder="اكتب وصفاً لمتجرك..." rows={3} />
+                    </div>
+                    <div className="field">
+                      <label>لون المتجر</label>
+                      <div className="color-row">
+                        {["#ff6b2b", "#7c3aed", "#00b37e", "#0ea5e9", "#e11d48", "#f59e0b"].map(c => (
+                          <button key={c} className={`color-dot ${storeColor === c ? "active" : ""}`} style={{ background: c }} onClick={() => setStoreColor(c)} />
+                        ))}
+                      </div>
                     </div>
                   </div>
-                  <button className="save-btn" onClick={addProduct}>إضافة المنتج ✓</button>
+                  <button className="save-btn" onClick={saveStore} disabled={saving}>
+                    {saving ? "جاري الحفظ..." : "حفظ المتجر ✓"}
+                  </button>
+                  {store && storeUrl && (
+                    <a className="store-url-btn" href={storeUrl} target="_blank" rel="noreferrer">
+                      🔗 فتح متجري: {storeUrl}
+                    </a>
+                  )}
                 </div>
               )}
-              {products.length === 0 ? (
-                <div className="empty"><p className="empty-icon">📦</p><p>أضف أول منتج!</p></div>
-              ) : (
-                <div className="products-list">
-                  {products.map(p => (
-                    <div key={p.id} className="product-item">
-                      <div className="product-info">
-                        <p className="product-name">{p.name}</p>
-                        <p className="product-price">{p.price} درهم</p>
-                        {p.description && <p className="product-desc">{p.description}</p>}
-                      </div>
-                      <div className="product-actions">
-                        <button className={`toggle-btn ${p.available ? "available" : "unavailable"}`} onClick={() => toggleProduct(p.id)}>
-                          {p.available ? "متاح ✓" : "غير متاح"}
-                        </button>
-                        <button className="delete-btn" onClick={() => deleteProduct(p.id)}>🗑️</button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
 
-          {tab === "الطلبات" && (
-            <div className="card">
-              <h2 className="card-title">الطلبات</h2>
-              {orders.length === 0 ? (
-                <div className="empty"><p className="empty-icon">🛍️</p><p>ما كاين حتى طلب بعد — شارك رابط متجرك!</p></div>
-              ) : (
-                <div className="orders-list">
-                  {orders.map((o, i) => (
-                    <div key={i} className="order-item">
-                      <div>
-                        <p className="order-name">{o.customer_name}</p>
-                        <p className="order-phone">{o.customer_phone}</p>
-                        <p className="order-date">{o.date ? new Date(o.date).toLocaleDateString("ar-MA") : ""}</p>
+              {tab === "المنتجات" && (
+                <div className="card">
+                  <div className="card-header">
+                    <h2 className="card-title">قائمة المنتجات</h2>
+                    <button className="add-btn" onClick={() => setShowAddProd(!showAddProd)}>{showAddProd ? "إلغاء ✕" : "+ إضافة منتج"}</button>
+                  </div>
+                  {showAddProd && (
+                    <div className="add-form">
+                      <div className="form-grid">
+                        <div className="field"><label>اسم المنتج *</label><input value={prodName} onChange={e => setProdName(e.target.value)} placeholder="مثال: فستان صيفي" /></div>
+                        <div className="field"><label>السعر (درهم) *</label><input value={prodPrice} onChange={e => setProdPrice(e.target.value)} placeholder="299" type="number" dir="ltr" /></div>
+                        <div className="field full"><label>الوصف</label><input value={prodDesc} onChange={e => setProdDesc(e.target.value)} placeholder="وصف مختصر..." /></div>
                       </div>
-                      <div>
-                        <p className="order-total">{o.total} درهم</p>
-                        <span className="order-status">جديد</span>
-                      </div>
+                      <button className="save-btn" onClick={addProduct}>إضافة المنتج ✓</button>
                     </div>
-                  ))}
+                  )}
+                  {products.length === 0 ? (
+                    <div className="empty"><p className="empty-icon">📦</p><p>أضف أول منتج!</p></div>
+                  ) : (
+                    <div className="products-list">
+                      {products.map(p => (
+                        <div key={p.id} className="product-item">
+                          <div className="product-info">
+                            <p className="product-name">{p.name}</p>
+                            <p className="product-price">{p.price} درهم</p>
+                            {p.description && <p className="product-desc">{p.description}</p>}
+                          </div>
+                          <div className="product-actions">
+                            <button className={`toggle-btn ${p.available ? "available" : "unavailable"}`} onClick={() => toggleProduct(p.id, p.available)}>
+                              {p.available ? "متاح ✓" : "غير متاح"}
+                            </button>
+                            <button className="delete-btn" onClick={() => deleteProduct(p.id)}>🗑️</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
-            </div>
+
+              {tab === "الطلبات" && (
+                <div className="card">
+                  <h2 className="card-title">الطلبات</h2>
+                  {orders.length === 0 ? (
+                    <div className="empty"><p className="empty-icon">🛍️</p><p>ما كاين حتى طلب بعد — شارك رابط متجرك!</p></div>
+                  ) : (
+                    <div className="orders-list">
+                      {orders.map(o => (
+                        <div key={o.id} className="order-item">
+                          <div>
+                            <p className="order-name">{o.customer_name}</p>
+                            <p className="order-phone">{o.customer_phone}</p>
+                            <p className="order-date">{new Date(o.created_at).toLocaleDateString("ar-MA")}</p>
+                          </div>
+                          <div>
+                            <p className="order-total">{o.total} درهم</p>
+                            <span className="order-status">جديد</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
           )}
         </main>
 
@@ -293,13 +278,15 @@ export default function Dashboard() {
         .store-link-label { font-size: 11px; color: rgba(255,255,255,0.4); }
         .store-link-url { font-size: 10px; color: rgba(255,255,255,0.6); word-break: break-all; direction: ltr; }
         .copy-btn { width: 100%; padding: 7px; background: rgba(255,107,43,0.2); border: 1px solid rgba(255,107,43,0.3); border-radius: 8px; color: var(--orange); font-family: "Tajawal", sans-serif; font-size: 12px; cursor: pointer; }
-        .open-btn { width: 100%; padding: 7px; background: rgba(0,179,126,0.15); border: 1px solid rgba(0,179,126,0.3); border-radius: 8px; color: #00b37e; font-family: "Tajawal", sans-serif; font-size: 12px; cursor: pointer; text-align: center; text-decoration: none; }
-        .main { flex: 1; padding: 32px 32px 80px; min-width: 0; position: relative; z-index: 10; }
+        .open-btn { width: 100%; padding: 7px; background: rgba(0,179,126,0.15); border: 1px solid rgba(0,179,126,0.3); border-radius: 8px; color: #00b37e; font-family: "Tajawal", sans-serif; font-size: 12px; cursor: pointer; text-align: center; text-decoration: none; display: block; }
+        .main { flex: 1; padding: 32px 32px 90px; min-width: 0; position: relative; z-index: 10; }
         .header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
         .header-title { font-size: 26px; font-weight: 800; color: var(--dark); }
         .header-sub { font-size: 14px; color: var(--muted); margin-top: 4px; }
         .msg-badge { background: rgba(0,179,126,0.1); border: 1px solid rgba(0,179,126,0.2); color: var(--green); padding: 8px 16px; border-radius: 10px; font-size: 14px; font-weight: 600; }
         .msg-badge.msg-warn { background: rgba(245,158,11,0.1); border-color: rgba(245,158,11,0.2); color: #d97706; }
+        .loading { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 300px; gap: 16px; color: var(--muted); }
+        .spinner { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--orange); border-radius: 50%; animation: spin 0.7s linear infinite; }
         .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
         .stat-card { background: white; border: 1px solid var(--border); border-radius: 14px; padding: 20px; }
         .stat-label { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
@@ -318,7 +305,9 @@ export default function Dashboard() {
         .color-dot { width: 30px; height: 30px; border-radius: 50%; border: 3px solid transparent; cursor: pointer; transition: all 0.2s; }
         .color-dot.active { border-color: var(--dark); transform: scale(1.2); }
         .save-btn { padding: 12px 28px; background: var(--orange); border: none; border-radius: 10px; color: white; font-family: "Tajawal", sans-serif; font-size: 15px; font-weight: 700; cursor: pointer; transition: all 0.2s; }
-        .save-btn:hover { background: #e55a1e; }
+        .save-btn:hover:not(:disabled) { background: #e55a1e; }
+        .save-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .store-url-btn { display: block; margin-top: 14px; padding: 12px 16px; background: rgba(0,179,126,0.08); border: 1px solid rgba(0,179,126,0.2); border-radius: 10px; color: #00b37e; font-family: "Tajawal", sans-serif; font-size: 13px; font-weight: 600; text-decoration: none; word-break: break-all; direction: ltr; text-align: center; }
         .add-btn { padding: 10px 20px; background: var(--dark); border: none; border-radius: 10px; color: white; font-family: "Tajawal", sans-serif; font-size: 14px; font-weight: 700; cursor: pointer; }
         .add-form { background: var(--surface2); border-radius: 12px; padding: 20px; margin-bottom: 20px; }
         .empty { text-align: center; padding: 48px 24px; color: var(--muted); }
@@ -341,9 +330,10 @@ export default function Dashboard() {
         .order-total { font-size: 18px; font-weight: 800; color: var(--orange); margin-bottom: 4px; text-align: left; }
         .order-status { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 20px; background: rgba(245,158,11,0.1); color: #d97706; }
         .mobile-nav { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: var(--dark); border-top: 1px solid rgba(255,255,255,0.1); z-index: 100; padding: 8px 0; }
-        .mobile-nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; background: none; border: none; color: rgba(255,255,255,0.5); font-family: "Tajawal", sans-serif; font-size: 11px; cursor: pointer; padding: 6px; transition: color 0.15s; }
+        .mobile-nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; background: none; border: none; color: rgba(255,255,255,0.5); font-family: "Tajawal", sans-serif; font-size: 11px; cursor: pointer; padding: 6px; transition: color 0.15s; text-decoration: none; }
         .mobile-nav-item.active { color: var(--orange); }
         .mobile-nav-item span:first-child { font-size: 22px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
         @media (max-width: 768px) {
           .sidebar { display: none; }
           .mobile-nav { display: flex !important; }
