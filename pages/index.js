@@ -259,24 +259,18 @@ export default function Dashboard() {
         </main>
 
         <div className="mobile-nav">
-  {TABS.map(t => (
-    <button key={t} className={`mobile-nav-item ${tab === t ? "active" : ""}`} onClick={() => setTab(t)}>
-      <span>{t === "المتجر" ? "🏪" : t === "المنتجات" ? "📦" : "🛍️"}</span>
-      <span>{t}</span>
-    </button>
-  ))}
-  {store && storeUrl && (
-    <a className="mobile-nav-item" href={storeUrl} target="_blank" rel="noreferrer">
-      <span>🔗</span>
-      <span>متجري</span>
-    </a>
-  )}
-</div>
+          {TABS.map(t => (
             <button key={t} className={`mobile-nav-item ${tab === t ? "active" : ""}`} onClick={() => setTab(t)}>
               <span>{t === "المتجر" ? "🏪" : t === "المنتجات" ? "📦" : "🛍️"}</span>
               <span>{t}</span>
             </button>
           ))}
+          {store && storeUrl && (
+            <a className="mobile-nav-item" href={storeUrl} target="_blank" rel="noreferrer">
+              <span>🔗</span>
+              <span>متجري</span>
+            </a>
+          )}
         </div>
       </div>
 
